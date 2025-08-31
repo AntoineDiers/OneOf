@@ -13,7 +13,7 @@ GENERATE_ONE_OF(MyOneOf,        // the name of the class
     (KEY_1, float),             // a variant with the key KEY_1 will contain a float value
     (KEY_2, std::string),       // a variant with the key KEY_2 will contain a std::string value
     (KEY_3, std::string),       // a variant with the key KEY_3 will contain a std::string value
-    (KEY_4, ClassName::Empty)   // a variant with the key KEY_4 will contain no data
+    (KEY_4, MyOneOf::Empty)     // a variant with the key KEY_4 will contain no data
 ) // Notice that two keys can be associated with the same type
 ```
 You can instanciate your class with the static member function **create** :
@@ -23,25 +23,31 @@ You can instanciate your class with the static member function **create** :
 MyOneOf my_oneof = MyOneOf::create<MyOneOf::Keys::KEY_2> ("My value"); 
 ```
 
-In order to handle an instance of your class you have to use the visitor pattern
+In order to handle an instance of your class you have to use the visitor pattern via the **Visitor** or the **VisitorMut** class
+(the **VisitorMut** class's callbacks that take non-const reference arguments)
 
 ```cpp
-// the Visitor<T> class constructor takes in a fallback function that is called if 
-// no specific callback is defined for the visited key. T is the return type of the visit, 
-// all visitor functions must return this type
-MyOneOf::Visitor<std::optional<std::string>> stringify_visitor([](const Thing::Keys& ) { return std::nullopt; });
+// Create our visitor
 
-// Add visitor functions for the keys that we know how to stringify, the rest of the keys will be handled by the fallback
-stringify_visitor.KEY_1 = [](const float& val) { return std::to_string(val); }
-stringify_visitor.KEY_2 = [](const std::string& val) { return val; }
-stringify_visitor.KEY_3 = [](const std::string& val) { return val; }
+// The visitor constructor takes the visit return type as a template parameter,
+// this is the type that will be returned by the visit method.
+// All visitor callbacks must return this type
+auto stringify_visitor = MyOneOf::Visitor<std::optional<std::string>>()
+.match<MyOneOf::Keys::KEY_1>([](const float& val)       { return std::to_string(val); })
+.match<MyOneOf::Keys::KEY_2>([](const std::string& val) { return val; })
+.match<MyOneOf::Keys::KEY_3>([](const std::string& val) { return val; })
+.fallback([](const MyOneOf::Keys& key){ return std::nullopt; }); // Called if none of the keys above match   
 
 // Visit our MyOneOf instance
-std::optional<std::string> stringified = my_oneof.visit(stringify_visitor);
+
+// NOTE : We could have done the visitor declaration and the visit in the same line
+// but it can be useful to keep the visitor if you want to apply it to multiple OneOfs  
+
+// IMPORTANT : The compiler will yell at you if all keys are not handled by the visitor,
+// so you must either match all keys or define a fallback function before calling visit
+
+std::optional<std::string> stringified = stringify_visitor.visit(my_oneof); // "My value"
 ```
-
-
-> The class **MyOneOf::VisitorMut** can be used with the member function **MyOneOf::visit_mut** to define visitors that take non-const reference arguments.
 
 ## Basic example
 
@@ -76,31 +82,32 @@ int main()
     // Create a visitor to handle each variant
     // void is the return type of the visit, all visitor functions must return void
     // The constructor takes a fallback function that is called if no specific visitor is defined for a key
-    Thing::Visitor<void> visitor([](const Thing::Keys&) { std::cout << "Unhandled Thing type" << std::endl; });
-    visitor.ANIMAL  = [](const AnimalProperties& props) { std::cout << "It's an animal!" << std::endl; };
-    visitor.PLANT   = [](const PlantProperties& props)  { std::cout << "It's a plant!" << std::endl; };
-    visitor.ROCK    = [](const RockProperties& props)   { std::cout << "It's a rock!" << std::endl; };
-    visitor.UNKNOWN = [](const Thing::Empty&)           { std::cout << "It's an unknown thing!" << std::endl; };
+    auto visitor = Thing::Visitor<void>()
+    .match<Thing::Keys::ANIMAL> ([](const AnimalProperties& props)  { std::cout << "It's an animal!" << std::endl; })
+    .match<Thing::Keys::PLANT>  ([](const PlantProperties& props)   { std::cout << "It's a plant!" << std::endl; })
+    .match<Thing::Keys::ROCK>   ([](const RockProperties& props)    { std::cout << "It's a rock!" << std::endl; })
+    .match<Thing::Keys::UNKNOWN>([](const Thing::Empty& props)      { std::cout << "What is it?" << std::endl; });
 
     // Visit each Thing instance
-    animal.visit(visitor);
-    plant.visit(visitor);
-    rock.visit(visitor);
-    unknown.visit(visitor);
+    visitor.visit(animal);
+    visitor.visit(plant);
+    visitor.visit(rock);
+    visitor.visit(unknown);
 
     // Create a visitor that checks if a Thing is a living thing (animal or plant)
     // bool is the return type of the visit, all visitor functions must return bool
     // We only define visitors for ANIMAL and PLANT, the others will be handled by the fallback
-    Thing::Visitor<bool> is_living_thing_visitor([](const Thing::Keys&){ return false; });
-    is_living_thing_visitor.ANIMAL = [](const AnimalProperties&) { return true; };
-    is_living_thing_visitor.PLANT  = [](const PlantProperties&)  { return true; };
-
+    auto is_living_thing_visitor = Thing::Visitor<bool>()
+    .match<Thing::Keys::ANIMAL>([](const AnimalProperties&) { return true; })
+    .match<Thing::Keys::PLANT>([](const PlantProperties&) { return true; })
+    .defaultFallback(); // The fallback will return false (bool default constructor gives false)
+    
     // Use the visitor to check if each Thing is a living thing
     // Here, visit returns a bool as we gave it a Visitor<bool>
-    bool is_animal_living  = animal.visit(is_living_thing_visitor);     // true
-    bool is_plant_living   = plant.visit(is_living_thing_visitor);      // true
-    bool is_rock_living    = rock.visit(is_living_thing_visitor);       // false
-    bool is_unknown_living = unknown.visit(is_living_thing_visitor);    // false
+    bool is_animal_living  = is_living_thing_visitor.visit(animal);     // true
+    bool is_plant_living   = is_living_thing_visitor.visit(plant);      // true
+    bool is_rock_living    = is_living_thing_visitor.visit(rock);       // false
+    bool is_unknown_living = is_living_thing_visitor.visit(unknown);    // false
 
     std::cout << std::boolalpha;
     std::cout << "Is animal a living thing? " << is_animal_living << std::endl;
