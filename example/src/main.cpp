@@ -3,7 +3,7 @@
 #include <map>
 #include <string>
 
-#include <one_of/one_of.h>
+#include <oneof/oneof.h>
 
 // --------------------------------------------------------------------------
 //                  Define the Request "OneOf" type
@@ -25,12 +25,14 @@ public:
     std::string session_token;
 };
 
+struct Empty{};
+
 // Define the Request type with various request kinds
-GENERATE_ONE_OF(Request,
-    (SIGN_IN,  AuthenticationData),                     // Signin request, contains username and password
-    (LOGIN,  AuthenticationData),                       // Login request, contains username and password
-    (LOGOUT, AuthentifiedRequest<Request::Empty>),      // Logout request, no additional data
-    (POST_MESSAGE, AuthentifiedRequest<std::string>))   // Post message request, contains the message to post
+ONE_OF_CREATE_ALTERNATIVE(SIGN_IN,      AuthenticationData)                 // Signin request, contains username and password
+ONE_OF_CREATE_ALTERNATIVE(LOGIN,        AuthenticationData)                 // Login request, contains username and password
+ONE_OF_CREATE_ALTERNATIVE(LOGOUT,       AuthentifiedRequest<Empty>)         // Logout request, no additional data
+ONE_OF_CREATE_ALTERNATIVE(POST_MESSAGE, AuthentifiedRequest<std::string>)   // Post message request, contains the message to post
+typedef oneof::OneOf<SIGN_IN, LOGIN, LOGOUT, POST_MESSAGE> Request;
 
 // --------------------------------------------------------------------------
 //                  Define the Response "OneOf" type
@@ -44,10 +46,10 @@ struct ErrorData
 };
 
 // Define the Response type with various response kinds
-GENERATE_ONE_OF(Response,
-    (AUTH_OK, std::string),     // Response to a successful login or sign-in, contains a session token
-    (OK,  Response::Empty),     // Generic OK response
-    (ERROR, ErrorData))         // Error response, contains an error code and message
+ONE_OF_CREATE_ALTERNATIVE(AUTH_OK,  std::string)    // Response to a successful login or sign-in, contains a session token
+ONE_OF_CREATE_ALTERNATIVE(OK,       Empty)          // Generic OK response
+ONE_OF_CREATE_ALTERNATIVE(ERROR,    ErrorData)      // Error response, contains an error code and message
+typedef oneof::OneOf<AUTH_OK, OK, ERROR> Response;
 
 // --------------------------------------------------------------------------
 //              Create a simple server to handle requests
@@ -58,48 +60,55 @@ class Server
 public:
 
     // Handle incoming requests and produce appropriate responses
-    Response handleRequest(Request req)
+    Response handleRequest(const Request& request)
     {
-        return Request::Visitor<Response>()
-            .match<Request::Keys::SIGN_IN>([this](const AuthenticationData& auth) -> Response 
-            {
-                if(user_database.find(auth.username) != user_database.end()) {
-                    return Response::create<Response::Keys::ERROR>(ErrorData{1, "User already exists"});
-                }
-                user_database[auth.username] = auth.password;
-                std::string session_token = "token_" + auth.username; // Simplified token generation
-                active_sessions[session_token] = auth.username;
-                return Response::create<Response::Keys::AUTH_OK>(session_token);
-            })
-            .match<Request::Keys::LOGIN>([this](const AuthenticationData& auth) -> Response 
-            {
-                auto it = user_database.find(auth.username);
-                if(it == user_database.end() || it->second != auth.password) {
-                    return Response::create<Response::Keys::ERROR>(ErrorData{2, "Invalid credentials"});
-                }
-                std::string session_token = "token_" + auth.username; // Simplified token generation
-                active_sessions[session_token] = auth.username;
-                return Response::create<Response::Keys::AUTH_OK>(session_token);
-            })
-            .match<Request::Keys::LOGOUT>([this](const AuthentifiedRequest<Request::Empty>& auth_req) -> Response 
-            {
-                auto it = active_sessions.find(auth_req.session_token);
-                if(it == active_sessions.end()) {
-                    return Response::create<Response::Keys::ERROR>(ErrorData{3, "Invalid session"});
-                }
-                active_sessions.erase(it);
-                return Response::create<Response::Keys::OK>(Response::Empty{});
-            })
-            .match<Request::Keys::POST_MESSAGE>([this](const AuthentifiedRequest<std::string>& auth_req) -> Response 
-            {
-                auto it = active_sessions.find(auth_req.session_token);
-                if(it == active_sessions.end()) {
-                    return Response::create<Response::Keys::ERROR>(ErrorData{3, "Invalid session"});
-                }
-                message_database[it->second] = auth_req.data;
-                return Response::create<Response::Keys::OK>(Response::Empty{});
-            })
-            .visit(req);
+        Response response;
+
+        request.match<SIGN_IN>([&](const AuthenticationData& req)
+        {
+            if(user_database.find(req.username) != user_database.end()) {
+                response = ERROR({1, "User already exists"});
+                return;
+            }
+            user_database[req.username] = req.password;
+            std::string session_token = "token_" + req.username; // Simplified token generation
+            active_sessions[session_token] = req.username;
+            response = AUTH_OK(session_token);
+        })
+        .match<LOGIN>([&](const AuthenticationData& req)
+        {
+            auto it = user_database.find(req.username);
+            if(it == user_database.end() || it->second != req.password) {
+                response = ERROR({2, "Invalid credentials"});
+                return;
+            }
+            std::string session_token = "token_" + req.username; // Simplified token generation
+            active_sessions[session_token] = req.username;
+            response = AUTH_OK(session_token);
+        })
+        .match<LOGOUT>([&](const AuthentifiedRequest<Empty>& req)
+        {
+            auto it = active_sessions.find(req.session_token);
+            if(it == active_sessions.end()) {
+                response = ERROR({3, "Invalid session"});
+                return;
+            }
+            active_sessions.erase(it);
+            response = OK();
+        })
+        .match<POST_MESSAGE>([&](const AuthentifiedRequest<std::string>& req)
+        {
+            auto it = active_sessions.find(req.session_token);
+            if(it == active_sessions.end()) {
+                response = ERROR({3, "Invalid session"});
+                return;
+            }
+            message_database[it->second] = req.data;
+            response = OK();
+        })
+        .assertMatchIsExhaustive();
+
+        return response;
     }
 
 private:
@@ -121,26 +130,23 @@ int main()
     // Simulate a SIGN_IN request   
     // --------------------------------------------------------------------------
 
-    Request sign_in_req = Request::create<Request::Keys::SIGN_IN>(AuthenticationData{"user1", "password1"});
-    Response sign_in_res = server.handleRequest(sign_in_req);
+    Request sign_in_req = SIGN_IN({"user1", "password1"});
+    std::optional<std::string> session_token;
 
-    std::optional<std::string> session_token = Response::Visitor<std::optional<std::string>>()
-    .match<Response::Keys::AUTH_OK>([&](const std::string& token) 
+    server.handleRequest(sign_in_req)
+    .match<AUTH_OK>([&](const std::string& token)
     {
         std::cout << "SIGN_IN successful, session token: " << token << std::endl;
-        return token;
+        session_token = token;
     })
-    .match<Response::Keys::ERROR>([&](const ErrorData& error) 
+    .match<ERROR>([&](const ErrorData& error)
     {
         std::cout << "SIGN_IN failed, error " << error.code << ": " << error.message << std::endl;
-        return std::optional<std::string>{};
     })
-    .fallback([](const Response::Keys& key) 
+    .fallback([](const size_t& index)
     {
         std::cout << "Unexpected response type" << std::endl;
-        return std::optional<std::string>{};
-    })
-    .visit(sign_in_res);
+    });
 
     if(!session_token) { return 1; } // Exit if sign-in failed
 
@@ -148,58 +154,52 @@ int main()
     // Simulate a LOGIN request with wrong credentials   
     // --------------------------------------------------------------------------
 
-    Request failed_login_req = Request::create<Request::Keys::LOGIN>(AuthenticationData{"user1", "wrongpassword"});
-    Response failed_login_res = server.handleRequest(failed_login_req);
-    Response::Visitor<void>()
-    .match<Response::Keys::ERROR>([&](const ErrorData& error) 
+    Request failed_login_req = LOGIN({"user1", "wrong_password"});
+    server.handleRequest(failed_login_req)
+    .match<ERROR>([&](const ErrorData& error) 
     {
         std::cout << "LOGIN with the wrong password failed with error " << error.code << ": " << error.message << std::endl;
     })
-    .fallback([](const Response::Keys& key)
+    .fallback([](const size_t& index)
     {
         std::cout << "Unexpected response type" << std::endl;
-    })
-    .visit(failed_login_res);
+    });
 
     // --------------------------------------------------------------------------
     // Simulate a POST_MESSAGE request   
     // --------------------------------------------------------------------------        
 
-    Request post_msg_req = Request::create<Request::Keys::POST_MESSAGE>(AuthentifiedRequest<std::string>{"Hello, World!", session_token.value()});
-    Response post_msg_res = server.handleRequest(post_msg_req);
-    Response::Visitor<void>()
-    .match<Response::Keys::OK>([&](const Response::Empty&) 
+    Request post_msg_req = POST_MESSAGE({"Hello, World!", session_token.value()});
+    server.handleRequest(post_msg_req)
+    .match<OK>([&](const Empty&)
     {
         std::cout << "POST_MESSAGE successful" << std::endl;
     })
-    .match<Response::Keys::ERROR>([&](const ErrorData& error) 
+    .match<ERROR>([&](const ErrorData& error) 
     {
         std::cout << "POST_MESSAGE failed, error " << error.code << ": " << error.message << std::endl;
     })
-    .fallback([](const Response::Keys& key) 
+    .fallback([](const size_t& index)
     {
         std::cout << "Unexpected response type" << std::endl;
-    })
-    .visit(post_msg_res);
+    });
 
     // --------------------------------------------------------------------------
     // Simulate a LOGOUT request    
     // --------------------------------------------------------------------------
 
-    Request logout_req = Request::create<Request::Keys::LOGOUT>(AuthentifiedRequest<Request::Empty>{{}, session_token.value()});
-    Response logout_res = server.handleRequest(logout_req);
-    Response::Visitor<void>()
-    .match<Response::Keys::OK>([&](const Response::Empty&) 
+    Request logout_req = LOGOUT({{}, session_token.value()});
+    server.handleRequest(logout_req)
+    .match<OK>([&](const Empty&)
     {
         std::cout << "LOGOUT successful" << std::endl;
     })
-    .match<Response::Keys::ERROR>([&](const ErrorData& error) 
+    .match<ERROR>([&](const ErrorData& error)
     {
         std::cout << "LOGOUT failed, error " << error.code << ": " << error.message << std::endl;
     })
-    .fallback([](const Response::Keys& key) 
+    .fallback([](const size_t& index)
     {
-        std::cout << "Unexpected response type" << std::endl;
-    })
-    .visit(logout_res);
+        std::cout << "LOGOUT response type" << std::endl;
+    });
 }
