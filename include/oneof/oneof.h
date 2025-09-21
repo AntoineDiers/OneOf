@@ -3,7 +3,7 @@
 #include <variant>
 #include <functional>
 
-#define ONE_OF_CREATE_ALTERNATIVE(name, type) struct name##_Tag{}; typedef oneof::Alternative<name##_Tag, type> name;
+#define ONE_OF_CREATE_ALTERNATIVE(name, type) struct name##_tag{}; typedef oneof::Alternative<name##_tag, type> name;
 
 namespace oneof
 {

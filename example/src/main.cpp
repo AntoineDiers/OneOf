@@ -130,10 +130,9 @@ int main()
     // Simulate a SIGN_IN request   
     // --------------------------------------------------------------------------
 
-    Request sign_in_req = SIGN_IN({"user1", "password1"});
     std::optional<std::string> session_token;
 
-    server.handleRequest(sign_in_req)
+    server.handleRequest(SIGN_IN({"user1", "password1"}))
     .match<AUTH_OK>([&](const std::string& token)
     {
         std::cout << "SIGN_IN successful, session token: " << token << std::endl;
@@ -154,8 +153,7 @@ int main()
     // Simulate a LOGIN request with wrong credentials   
     // --------------------------------------------------------------------------
 
-    Request failed_login_req = LOGIN({"user1", "wrong_password"});
-    server.handleRequest(failed_login_req)
+    server.handleRequest(LOGIN({"user1", "wrong_password"}))
     .match<ERROR>([&](const ErrorData& error) 
     {
         std::cout << "LOGIN with the wrong password failed with error " << error.code << ": " << error.message << std::endl;
@@ -169,8 +167,7 @@ int main()
     // Simulate a POST_MESSAGE request   
     // --------------------------------------------------------------------------        
 
-    Request post_msg_req = POST_MESSAGE({"Hello, World!", session_token.value()});
-    server.handleRequest(post_msg_req)
+    server.handleRequest(POST_MESSAGE({"Hello, World!", session_token.value()}))
     .match<OK>([&](const Empty&)
     {
         std::cout << "POST_MESSAGE successful" << std::endl;
@@ -188,8 +185,7 @@ int main()
     // Simulate a LOGOUT request    
     // --------------------------------------------------------------------------
 
-    Request logout_req = LOGOUT({{}, session_token.value()});
-    server.handleRequest(logout_req)
+    server.handleRequest(LOGOUT({{}, session_token.value()}))
     .match<OK>([&](const Empty&)
     {
         std::cout << "LOGOUT successful" << std::endl;
