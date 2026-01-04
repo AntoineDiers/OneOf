@@ -6,12 +6,11 @@
 
 namespace one_of
 {
-
     /**
      * Allows to visit a const OneOf instance
      * @tparam V the variant type of the OneOf instance
-     * @tparam Flags a bitmap describing which alternatives have already been matched
-     *               (0b100 means that the 3rd alternative has already been matched)
+     * @tparam Flags a bitmap describing which tag have already been matched
+     *               (0b100 means that the 3rd tag has already been matched)
      */
     template<typename V, uint64_t Flags = 0>
     class ConstVisitor
@@ -24,15 +23,15 @@ namespace one_of
             _already_found(already_found) {}
 
         /**
-         * Matches a const OneOf with the given Alternative
-         * @tparam Alt the Alternative
-         * @param cb the function that will be called if the OneOf matches the Alternative
+         * Matches a const OneOf with the given Tag
+         * @tparam Tag the tag we want to match
+         * @param cb the function that will be called if the OneOf matches the tag
          * @return A visitor for chained calls
          */
         template<typename Tag>
         ConstVisitor<V, Flags | (1 << details::index_of<Tag, V>::value)> match(std::function<void(const typename Tag::Type&)> cb)
         {
-            static_assert((Flags & (1 << details::index_of<Tag, V>::value)) == 0, "Can not match the same alternative twice");
+            static_assert((Flags & (1 << details::index_of<Tag, V>::value)) == 0, "Can not match the same tag twice");
 
             if (details::index_of<Tag, V>::value == _index)
             {
@@ -43,8 +42,8 @@ namespace one_of
         }
 
         /**
-         * Defines a fallback function that handles unmatched Alternatives
-         * @param cb in case of an unmatched Alternative, this function will be called with the Alternative's index
+         * Defines a fallback function that handles unmatched tags
+         * @param cb in case of an unmatched tag, this function will be called
          */
         void fallback(std::function<void()> cb)
         {
@@ -52,7 +51,7 @@ namespace one_of
         }
 
         /**
-         * Asserts that all Alternatives have been matched
+         * Asserts that all tags have been matched
          */
         void assertMatchIsExhaustive() const
         {
@@ -69,8 +68,8 @@ namespace one_of
     /**
      * Allows to visit a non-const OneOf instance
      * @tparam V the variant type of the OneOf instance
-     * @tparam Flags a bitmap describing which alternatives have already been matched
-     *               (0b100 means that the 3rd alternative has already been matched)
+     * @tparam Flags a bitmap describing which tags have already been matched
+     *               (0b100 means that the 3rd tag has already been matched)
      */
     template<typename V, uint64_t Flags = 0>
     class MutVisitor
@@ -83,15 +82,15 @@ namespace one_of
             _already_found(already_found) {}
 
         /**
-         * Matches a non-const OneOf with the given Alternative
-         * @tparam Alt the Alternative
-         * @param cb the function that will be called if the OneOf matches the Alternative
+         * Matches a non-const OneOf with the given tag
+         * @tparam Tag the tag to match
+         * @param cb the function that will be called if the OneOf matches the tag
          * @return A visitor for chained calls
          */
         template<typename Tag>
         MutVisitor<V, Flags | (1 << details::index_of<Tag, V>::value)> match(std::function<void(typename Tag::Type&)> cb)
         {
-            static_assert((Flags & (1 << details::index_of<Tag, V>::value)) == 0, "Can not match the same alternative twice");
+            static_assert((Flags & (1 << details::index_of<Tag, V>::value)) == 0, "Can not match the same tag twice");
 
             if (details::index_of<Tag, V>::value == _index)
             {
@@ -102,8 +101,8 @@ namespace one_of
         }
 
         /**
-         * Defines a fallback function that handles unmatched Alternatives
-         * @param cb in case of an unmatched Alternative, this function will be called with the Alternative's index
+         * Defines a fallback function that handles unmatched Tags
+         * @param cb in case of an unmatched tag, this function will be called with the tag's index
          */
         void fallback(std::function<void()> cb)
         {
@@ -111,7 +110,7 @@ namespace one_of
         }
 
         /**
-         * Asserts that all Alternatives have been matched
+         * Asserts that all Tags have been matched
          */
         void assertMatchIsExhaustive() const
         {
@@ -177,9 +176,9 @@ namespace one_of
         typedef details::TaggedUnion<Tags...> Variant;
 
         /**
-         * Matches a const OneOf with the given Alternative
-         * @tparam Alt the Alternative
-         * @param cb the function that will be called if the OneOf matches the Alternative
+         * Matches a const OneOf with the given tag
+         * @tparam Tag the tag to match
+         * @param cb the function that will be called if the OneOf matches the tag
          * @return A visitor for chained calls
          */
         template<typename Tag>
@@ -189,9 +188,9 @@ namespace one_of
         }
 
         /**
-         * Matches a non-const OneOf with the given Alternative
-         * @tparam Alt the Alternative
-         * @param cb the function that will be called if the OneOf matches the Alternative
+         * Matches a non-const OneOf with the given tag
+         * @tparam Tag the tag to match
+         * @param cb the function that will be called if the OneOf matches the tag
          * @return A visitor for chained calls
          */
         template<typename Tag>
