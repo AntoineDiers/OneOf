@@ -1,3 +1,5 @@
+#pragma once
+
 #include "details/tagged_union.h"
 
 #include <functional>
