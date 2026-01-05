@@ -1,8 +1,8 @@
 #include <stdint.h>
 #include <utility>
 
-namespace one_of::details
-{
+namespace one_of {
+namespace details {
     
     // -----------------------------------------------
     // Tagged Union Definition
@@ -126,4 +126,4 @@ namespace one_of::details
     template<typename T>                                struct index_of<T, TaggedUnion<T>>            { static constexpr uint32_t value = 0; };
     template<typename T, typename... Ts>                struct index_of<T, TaggedUnion<T, Ts...>>     { static constexpr uint32_t value = 0; };
     template<typename U, typename T, typename... Ts>    struct index_of<U, TaggedUnion<T, Ts...>>     { static constexpr uint32_t value =  1 + index_of<U, TaggedUnion<Ts...>>::value; };
-}
+}}
