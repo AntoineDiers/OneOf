@@ -214,7 +214,7 @@ namespace one_of
             {
                 details::destruct<T1>(_value);
             }
-            if(index == 1) 
+            else if(index == 1) 
             {
                 details::destruct<T2>(_value);
             }
@@ -237,7 +237,7 @@ namespace one_of
             {
                 details::construct<T1>(_value, details::get<T1>(other));
             }
-            if(index == 1) 
+            else if(index == 1) 
             {
                 details::construct<T2>(_value, details::get<T2>(other));
             }
